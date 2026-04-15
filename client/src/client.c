@@ -2,110 +2,94 @@
 
 int main(void)
 {
-	/*---------------------------------------------------PARTE 2-------------------------------------------------------------*/
+    /*---------------------------------------------------PARTE 2-------------------------------------------------------------*/
+    int conexion;
+    char* ip;
+    char* puerto;
+    char* valor;
 
-	int conexion;
-	char* ip;
-	char* puerto;
-	char* valor;
+    t_log* logger;
+    t_config* config;
 
-	t_log* logger;
-	t_config* config;
+    logger = log_create("cliente.log", "CLIENTE", true, LOG_LEVEL_INFO);
+    log_info(logger, "Hola! Soy un log");
 
-	/* ---------------- LOGGING ---------------- */
+    config = config_create("cliente.config");
+    if (config == NULL) {
+        log_error(logger, "No se pudo leer el archivo de config");
+        log_destroy(logger);
+        return EXIT_FAILURE;
+    }
 
-	logger = log_create("tp0.log", "CLIENTE", true, LOG_LEVEL_INFO);
-	// Usando el logger creado previamente
-	log_info(logger,"Hola Soy un log");
-	// Escribi: "Hola! Soy un log"
+    ip = config_get_string_value(config, "IP");
+    puerto = config_get_string_value(config, "PUERTO");
+    valor = config_get_string_value(config, "CLAVE");
 
-	/* ---------------- ARCHIVOS DE CONFIGURACION ---------------- */
+    log_info(logger, "IP: %s - PUERTO: %s - CLAVE: %s", ip, puerto, valor);
 
-	config = config_create("cliente.config");
-	// Usando el config creado previamente, leemos los valores del config y los 
-	// dejamos en las variables 'ip', 'puerto' y 'valor'
-	ip = config_get_string_value(config, "IP");
-	puerto = config_get_string_value(config,"PUERTO");
-	valor = config_get_string_value(config,"CLAVE");
-	// Loggeamos el valor de config
-	log_info(logger,"IP leida: %s",ip);
-	log_info(logger,"PUERTO leido: %s",puerto);
-	log_info(logger,"CLAVE leida: %s",valor);
+    leer_consola(logger);
 
-	/* ---------------- LEER DE CONSOLA ---------------- */
+    /*---------------------------------------------------PARTE 3-------------------------------------------------------------*/
+    
+    conexion = crear_conexion(ip, puerto);
 
-	leer_consola(logger);
-	log_info(logger,"Termina la parte 2 del tp0");
+    // SEGURIDAD: Si no hay conexión, terminamos el programa con elegancia
+    if (conexion == -1) {
+        log_error(logger, "No se pudo conectar al servidor. ¡Asegurate de que esté prendido!");
+        terminar_programa(-1, logger, config);
+        return EXIT_FAILURE;
+    }
 
-	/*---------------------------------------------------PARTE 3-------------------------------------------------------------*/
+    // IMPORTANTE: Revisar el orden de los parámetros según tus commons.
+    // Generalmente es: enviar_mensaje(texto, socket);
+    enviar_mensaje(valor, conexion);
 
-	// ADVERTENCIA: Antes de continuar, tenemos que asegurarnos que el servidor esté corriendo para poder conectarnos a él
+    enviar_paquete_consola(conexion, logger);
 
-	// Creamos una conexión hacia el servidor
-	conexion = crear_conexion(ip, puerto);
+    terminar_programa(conexion, logger, config);
 
-	// Enviamos al servidor el valor de CLAVE como mensaje
-
-	enviar_mensaje(valor, conexion);
-
-	// Armamos y enviamos el paquete
-
-	enviar_paquete_consola(conexion, logger);
-
-	terminar_programa(conexion, logger, config);
-
-	/*---------------------------------------------------PARTE 5-------------------------------------------------------------*/
+    return EXIT_SUCCESS;
 }
 
 void leer_consola(t_log* logger)
 {
-	char* leido;
-
-	// El resto, las vamos leyendo y logueando hasta recibir un string vacío
-	
-	while (1) {
-    	leido = readline("> ");
-
-    	// Si es string vacío, termina el programa
-    	if (strcmp(leido, "") == 0) {
-        	free(leido);
-        	break;
-    	}
-    	// Logueamos la línea ingresada
-    	log_info(logger, "Linea ingresada: %s", leido);
-    	free(leido);
-	}
-	// ¡No te olvides de liberar las lineas antes de regresar!
+    char* leido;
+    while (1) {
+        leido = readline("> ");
+        if (leido == NULL || strcmp(leido, "") == 0) {
+            free(leido);
+            break;
+        }
+        log_info(logger, "Linea ingresada: %s", leido);
+        free(leido);
+    }
 }
 
 void enviar_paquete_consola(int conexion, t_log* logger)
 {
-	char* leido;
-	t_paquete* paquete = crear_paquete();
+    char* leido;
+    t_paquete* paquete = crear_paquete();
 
-	while (1) {
-		leido = readline("> ");
+    while (1) {
+        leido = readline("> ");
+        if (leido == NULL || strcmp(leido, "") == 0) {
+            free(leido);
+            break;
+        }
+        agregar_a_paquete(paquete, leido, strlen(leido) + 1);
+        free(leido);
+    }
 
-		// Si se ingresa línea vacía, se termina
-		if (strcmp(leido, "") == 0) {
-			free(leido);
-			break;
-		}
-
-		log_info(logger, "Linea enviada: %s", leido);
-
-		agregar_a_paquete(paquete, leido, strlen(leido) + 1);
-
-		free(leido);
-	}
-
-	enviar_paquete(paquete, conexion);
-	eliminar_paquete(paquete);
+    enviar_paquete(paquete, conexion);
+    eliminar_paquete(paquete);
 }
 
 void terminar_programa(int conexion, t_log* logger, t_config* config)
 {
-	liberar_conexion(conexion);
-	log_destroy(logger);
-	config_destroy(config);
+    // Solo cerramos la conexión si el socket es válido
+    if (conexion != -1) {
+        liberar_conexion(conexion);
+    }
+    log_destroy(logger);
+    config_destroy(config);
 }
